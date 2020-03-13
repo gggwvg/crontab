@@ -8,14 +8,7 @@ import (
 	"strings"
 )
 
-const (
-	_scheduleMinuteLen = 5 // 含有的时间因子个数，如: "* * * * *"
-	_scheduleSecondLen = 6 //  含有的时间因子个数，如: "* * * * * *"
-)
-
-var (
-	_spacesRegexp = regexp.MustCompile("\\s+")
-)
+var _spacesRegexp = regexp.MustCompile("\\s+")
 
 type scheduler struct {
 	sec       map[int]bool
@@ -25,19 +18,20 @@ type scheduler struct {
 	month     map[int]bool
 	dayOfWeek map[int]bool
 
+	cron *Crontab
 	fn   interface{}
 	args []interface{}
 }
 
-func newScheduler(typ int, schedule string) (s *scheduler, err error) {
-	s = new(scheduler)
+func newScheduler(cron *Crontab, schedule string) (s *scheduler, err error) {
+	s = &scheduler{cron: cron}
 	schedule = _spacesRegexp.ReplaceAllLiteralString(schedule, " ")
 	parts := strings.Split(schedule, " ")
 	index := 0
 	l := len(parts)
-	if l == _scheduleMinuteLen && typ == _crontabTypeMinute {
+	if l == 5 && cron.opts.ScheduleType == scheduleByMinute {
 		// do nothing
-	} else if l == _scheduleSecondLen && typ == _crontabTypeSecond {
+	} else if l == 6 && cron.opts.ScheduleType == scheduleBySecond {
 		s.sec, err = parseSchedule(parts[index], 0, 59)
 		if err != nil {
 			return
@@ -82,26 +76,26 @@ func newScheduler(typ int, schedule string) (s *scheduler, err error) {
 }
 
 // run 执行 scheduler，捕获运行中的 panic
-func (j *scheduler) run() {
+func (s *scheduler) run() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("crontab: run panic(%v)", r)
 		}
 	}()
-	v := reflect.ValueOf(j.fn)
-	args := make([]reflect.Value, len(j.args))
-	for i, a := range j.args {
+	v := reflect.ValueOf(s.fn)
+	args := make([]reflect.Value, len(s.args))
+	for i, a := range s.args {
 		args[i] = reflect.ValueOf(a)
 	}
 	v.Call(args)
 }
 
 // shouldRun 判断 scheduler 是否应该运行
-func (j *scheduler) shouldRun(typ int, t *ticker) bool {
-	b := j.min[t.min] && j.hour[t.hour] && j.month[t.month] &&
-		(j.day[t.day] || j.dayOfWeek[t.dayOfWeek])
-	if typ == _crontabTypeMinute {
+func (s *scheduler) shouldRun(t *ticker) bool {
+	b := s.min[t.min] && s.hour[t.hour] && s.month[t.month] &&
+		(s.day[t.day] || s.dayOfWeek[t.dayOfWeek])
+	if s.cron.opts.ScheduleType == scheduleByMinute {
 		return b
 	}
-	return b && j.sec[t.sec]
+	return b && s.sec[t.sec]
 }

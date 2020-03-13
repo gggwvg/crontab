@@ -6,33 +6,34 @@ import (
 	"time"
 )
 
-const (
-	_crontabTypeMinute = iota
-	_crontabTypeSecond
-)
-
 // Crontab  实现 unix 中的 crontab 特性
 // 支持 秒级 和 分钟级 调度
 type Crontab struct {
-	typ        int
+	opts       *Options
 	ticker     *time.Ticker
 	schedulers map[string]*scheduler
 	mu         sync.RWMutex
 }
 
-// NewMinute 新建分钟级调度器
-func NewMinute() *Crontab {
-	return newCrontab(_crontabTypeMinute, time.Minute)
+// New 新建调度器
+func New(opts ...Option) *Crontab {
+	options := newOptions()
+	for _, o := range opts {
+		o(options)
+	}
+	return newCrontab(options)
 }
 
-// NewSecond 新建秒级调度器
-func NewSecond() *Crontab {
-	return newCrontab(_crontabTypeSecond, time.Second)
-}
-
-func newCrontab(typ int, dur time.Duration) *Crontab {
+func newCrontab(opts *Options) *Crontab {
+	var dur time.Duration
+	switch opts.ScheduleType {
+	case scheduleByMinute:
+		dur = time.Minute
+	case scheduleBySecond:
+		dur = time.Second
+	}
 	c := &Crontab{
-		typ:        typ,
+		opts:       opts,
 		ticker:     time.NewTicker(dur),
 		schedulers: make(map[string]*scheduler),
 	}
@@ -55,7 +56,7 @@ func newCrontab(typ int, dur time.Duration) *Crontab {
 // - scheduler 函数签名的参数和传入的参数数量不符
 // - 相同名称的 scheduler 重复添加
 func (c *Crontab) Add(name, schedule string, fn interface{}, args ...interface{}) {
-	s, err := newScheduler(c.typ, schedule)
+	s, err := newScheduler(c, schedule)
 	if err != nil {
 		panic(err)
 	}
@@ -97,7 +98,7 @@ func (c *Crontab) runScheduled() {
 		ss := c.schedulers
 		c.mu.RUnlock()
 		for _, s := range ss {
-			if s.shouldRun(c.typ, ticker) {
+			if s.shouldRun(ticker) {
 				go s.run()
 			}
 		}

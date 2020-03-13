@@ -6,6 +6,7 @@ import (
 )
 
 func TestSchedule(t *testing.T) {
+	cron := New()
 	minuteSchedules := []struct {
 		s   string
 		cnt [5]int
@@ -19,7 +20,7 @@ func TestSchedule(t *testing.T) {
 		{"1,2,5-8 * * */3 *", [5]int{6, 24, 31, 4, 7}},
 	}
 	for _, sch := range minuteSchedules {
-		j, err := newScheduler(_crontabTypeMinute, sch.s)
+		j, err := newScheduler(cron, sch.s)
 		if err != nil {
 			t.Error(err)
 		}
@@ -39,6 +40,8 @@ func TestSchedule(t *testing.T) {
 			t.Error(sch.s, "dayOfWeek count expected to be", sch.cnt[4], "result", len(j.dayOfWeek), j.dayOfWeek)
 		}
 	}
+	cron.Stop()
+	cron = New(ScheduleBySecond())
 	secondSchedules := []struct {
 		s   string
 		cnt [6]int
@@ -51,7 +54,7 @@ func TestSchedule(t *testing.T) {
 		{"1,2,5-8 * * */3 * *", [6]int{6, 60, 24, 11, 12, 0}},
 	}
 	for _, sch := range secondSchedules {
-		j, err := newScheduler(_crontabTypeSecond, sch.s)
+		j, err := newScheduler(cron, sch.s)
 		if err != nil {
 			t.Error(err)
 		}
@@ -78,6 +81,7 @@ func TestSchedule(t *testing.T) {
 
 // TestScheduleError tests crontab syntax which should not be accepted
 func TestScheduleError(t *testing.T) {
+	cron := New()
 	var schErrorTest = []string{
 		"* * * * * *",
 		"0-70 * * * *",
@@ -94,7 +98,7 @@ func TestScheduleError(t *testing.T) {
 		"a b c d e",
 	}
 	for _, s := range schErrorTest {
-		if _, err := newScheduler(_crontabTypeMinute, s); err == nil {
+		if _, err := newScheduler(cron, s); err == nil {
 			t.Error(s, "should be error", err)
 		}
 	}
@@ -107,13 +111,13 @@ func TestSchedulePanic(t *testing.T) {
 			t.FailNow()
 		}
 	}()
-	m := NewMinute()
+	m := New()
 	m.Add("should panic, wrong number of args", "* * * * *", func() {}, 10)
 	m.Add("should panic, fn is nil", "* * * * *", nil)
 	m.Add("should panic, fn is not function", "* * * * *", 8)
 	m.Add("should panic, args are not the correct type", "* * * * *", func(i int) {}, "s")
 	m.Add("should panic, schedule syntax invalid number error", "* * * * * *", func() {})
-	s := NewSecond()
+	s := New(ScheduleBySecond())
 	s.Add("should panic, schedule syntax invalid number error", "* * * * *", func() {})
 	s.Add("should panic, schedule syntax error", "88 * * * * *", func() {})
 }
@@ -122,7 +126,7 @@ func TestCrontab(t *testing.T) {
 	var (
 		test1, test2 int
 		test2str     = ""
-		s            = NewSecond()
+		s            = New(ScheduleBySecond())
 	)
 	s.Add("test1", "* * * * * *", func() { test1++ })
 	s.Add("test2", "* * * * * *", func(s string) { test2++; test2str = s }, "whatever")
@@ -143,7 +147,7 @@ func TestCrontab(t *testing.T) {
 func TestCrontabRun(t *testing.T) {
 	var (
 		test1, test2 int
-		s            = NewSecond()
+		s            = New(ScheduleBySecond())
 	)
 	s.Add("test1", "10 * * * * *", func() { test1++ })
 	s.Add("test2", "10 * * * * *", func() { test2++ })
